@@ -43,15 +43,24 @@ jobs:
           # 1. 解包官方 init_boot
           ./magiskboot unpack init_boot.img
           
-          # 2. 批量修改 ramdisk 内部属性 (核心：禁用联网要求并开启 ADB)
-          # 使用 magiskboot 的 patch 功能可以一次性处理多个 prop 文件
-          ./magiskboot cpio ramdisk "patch" \
-            "ro.debuggable 0 1" \
-            "ro.adb.secure 1 0" \
-            "ro.secure 1 0" \
-            "ro.setupwizard.mode ENABLED DISABLED" \
-            "ro.setupwizard.network_required 1 0" \
-            "ro.setupwizard.wifi_required 1 0"
+          # 2. 提取 ramdisk 里的所有内容到当前目录
+          ./magiskboot cpio ramdisk "extract"
+          
+          # 3. 强制开启 ADB、禁用授权并绕过联网要求
+          # 遍历 ramdisk 中所有常见的属性文件进行修改
+          for prop in default.prop prop.default system/etc/prop.default vendor/build.prop; do
+            if [ -f "$prop" ]; then
+              echo "正在修补: $prop"
+              sed -i 's/ro.debuggable=0/ro.debuggable=1/g' "$prop"
+              sed -i 's/ro.adb.secure=1/ro.adb.secure=0/g' "$prop"
+              sed -i 's/ro.secure=1/ro.secure=0/g' "$prop"
+              sed -i 's/ro.setupwizard.mode=ENABLED/ro.setupwizard.mode=DISABLED/g' "$prop"
+              sed -i 's/ro.setupwizard.network_required=1/ro.setupwizard.network_required=0/g' "$prop"
+              sed -i 's/ro.setupwizard.wifi_required=1/ro.setupwizard.wifi_required=0/g' "$prop"
+              # 将修改后的文件写回 ramdisk
+              ./magiskboot cpio ramdisk "add 0644 $prop $prop"
+            fi
+          done
 
           # 3. 创建跳过激活的脚本
           cat <<EOF > skip_wizard.rc
