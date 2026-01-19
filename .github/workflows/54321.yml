@@ -43,15 +43,24 @@ jobs:
           # 1. 解包官方 init_boot
           ./magiskboot unpack init_boot.img
           
-          # 2. 修改属性：开启 ADB 调试并禁用密钥授权弹窗 (ro.adb.secure=0)
-          # 这样即便卡在激活界面，ADB 也能直接连接
-          ./magiskboot cpio ramdisk \
-            "patch" \
-            "ro.debuggable 0 1" \
-            "ro.adb.secure 1 0" \
-            "ro.secure 1 0" \
-            "ro.setupwizard.mode ENABLED DISABLED"
+          # 2. 修改属性：使用 magiskboot 提取并修改 prop 文件
+          # 常见的属性存储在 ramdisk 中的 default.prop 或 prop.default
+          # 注意：GKI 架构可能在不同的路径，我们直接全局尝试修改
+          ./magiskboot cpio ramdisk "extract"
+          
+          # 强制开启调试模式和禁用 ADB 授权 (处理提取出的文件)
+          # 如果文件不存在，sed 不会报错
+          for prop in default.prop prop.default system/etc/prop.default; do
+            if [ -f "$prop" ]; then
+              sed -i 's/ro.debuggable=0/ro.debuggable=1/g' "$prop"
+              sed -i 's/ro.adb.secure=1/ro.adb.secure=0/g' "$prop"
+              sed -i 's/ro.secure=1/ro.secure=0/g' "$prop"
+              # 将修改后的文件写回 ramdisk
+              ./magiskboot cpio ramdisk "add 0644 $prop $prop"
+            fi
+          done
 
+          
           # 3. 创建跳过激活的脚本 (利用 init.rc 机制在开机时自动执行)
           cat <<EOF > skip_wizard.rc
           on property:sys.boot_completed=1
