@@ -15,7 +15,12 @@ jobs:
           sudo apt-get install -y wget cpio
 
       - name: Get Magisk v30.6 and Extract magiskboot and get init_boot
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # 4. 获得init_boot.img
+          gh release download --repo ${{ github.repository }} --clobber
+          
           # 1. 下载官方 Magisk v30.6 APK (2026年最新稳定版)
           echo "正在下载 Magisk v30.6..."
           wget https://github.com/topjohnwu/Magisk/releases/download/v30.6/Magisk-v30.6.apk
@@ -31,8 +36,7 @@ jobs:
           # 验证工具是否可用
           ./magiskboot --help | head -n 1
 
-          # 获得init_boot.img
-          gh release download --repo ${{ github.repository }} --clobber
+
 
       - name: Patch Ramdisk
         run: |
