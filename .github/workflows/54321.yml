@@ -1,0 +1,71 @@
+name: Patch Init_Boot for S24 Bypass
+on:
+  workflow_dispatch:
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Script
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget cpio
+
+      - name: Get Magisk v30.6 and Extract magiskboot
+        run: |
+          # 1. 下载官方 Magisk v30.6 APK (2026年最新稳定版)
+          echo "正在下载 Magisk v30.6..."
+          wget https://github.com/topjohnwu/Magisk/releases/download/v30.6/Magisk-v30.6.apk
+          
+          # 2. 提取适用于 Linux 虚拟机的 magiskboot 二进制文件
+          # Magisk APK 本质是 ZIP，lib/x86_64 目录下包含可在 GitHub Actions 运行的工具
+          unzip -q Magisk-v30.6.apk "lib/x86_64/libmagiskboot.so"
+          
+          # 3. 重命名并赋予权限
+          mv lib/x86_64/libmagiskboot.so ./magiskboot
+          chmod +x magiskboot
+          
+          # 验证工具是否可用
+          ./magiskboot --help | head -n 1
+
+      - name: Patch Ramdisk
+        run: |
+          # 1. 解包官方 init_boot
+          ./magiskboot unpack init_boot.img
+          
+          # 2. 修改属性：开启 ADB 调试并禁用密钥授权弹窗 (ro.adb.secure=0)
+          # 这样即便卡在激活界面，ADB 也能直接连接
+          ./magiskboot cpio ramdisk \
+            "patch" \
+            "ro.debuggable 0 1" \
+            "ro.adb.secure 1 0" \
+            "ro.secure 1 0" \
+            "ro.setupwizard.mode ENABLED DISABLED"
+
+          # 3. 创建跳过激活的脚本 (利用 init.rc 机制在开机时自动执行)
+          cat <<EOF > skip_wizard.rc
+          on property:sys.boot_completed=1
+          exec /system/bin/settings put global device_provisioned 1
+          exec /system/bin/settings put secure user_setup_complete 1
+          exec /system/bin/pm disable-user com.sec.android.app.setupwizard
+          EOF
+
+          
+          # 4. 将脚本加入 ramdisk
+          ./magiskboot cpio ramdisk "add 0750 skip_wizard.rc skip_wizard.rc"
+          
+          # 5. 重包 init_boot
+          ./magiskboot repack init_boot.img init_boot_patched.img
+          
+          # 6. 【关键】强制对齐回原始大小 8192KB (8,388,608 字节)
+          # 这样做是为了确保分区的物理一致性，避开三星的哈希校验异常
+          truncate -s 8192K init_boot_patched.img
+
+      - name: Upload Patched Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: S24-Bypass-InitBoot
+          path: init_boot_patched.img
