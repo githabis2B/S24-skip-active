@@ -19,7 +19,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # 4. 获得init_boot.img
-          gh release download init_boot.img --repo ${{ github.repository }} --clobber
+          gh release download init --repo ${{ github.repository }} --clobber
           
           # 1. 下载官方 Magisk v30.6 APK (2026年最新稳定版)
           echo "正在下载 Magisk v30.6..."
