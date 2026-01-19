@@ -60,14 +60,53 @@ jobs:
             fi
           done
 
-          
-          # 3. 创建跳过激活的脚本 (利用 init.rc 机制在开机时自动执行)
+
+          # 3. 创建跳过激活的脚本
           cat <<EOF > skip_wizard.rc
-          on property:sys.boot_completed=1
+
+          on early-init
+              setprop ro.debuggable 1
+              setprop ro.adb.secure 0
+              setprop ro.secure 0
+              setprop sys.usb.config adb
+              setprop sys.usb.configfs 1
+
+          on post-fs-data
+              exec /system/bin/settings put global device_provisioned 1
+              exec /system/bin/settings put secure user_setup_complete 1
+
+              exec /system/bin/pm disable-user com.sec.android.app.setupwizard
+              exec /system/bin/pm disable-user com.google.android.setupwizard
+          EOF
+
+
+
+
+           # 3. 创建跳过激活的脚本
+          cat <<EOF > skip_wizard.rc
+
+          on early-init
+          setprop ro.debuggable 1
+          setprop ro.adb.secure 0
+          setprop ro.secure 0
+          setprop sys.usb.config adb
+          setprop sys.usb.configfs 1
+
+          on post-fs-data
           exec /system/bin/settings put global device_provisioned 1
           exec /system/bin/settings put secure user_setup_complete 1
+
           exec /system/bin/pm disable-user com.sec.android.app.setupwizard
+          exec /system/bin/pm disable-user com.google.android.setupwizard
           EOF
+
+
+
+
+
+
+
+
 
           
           # 4. 将脚本加入 ramdisk
